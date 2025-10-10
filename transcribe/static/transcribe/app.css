@@ -1,0 +1,4 @@
+body { font-family: system-ui, -apple-system, Arial, sans-serif; margin: 2rem; }
+.controls { display: flex; gap: 1rem; margin: 1rem 0; }
+pre { background: #f6f6f6; padding: 1rem; min-height: 80px; }
+button { padding: .6rem 1rem; font-size: 1rem; }

@@ -1,0 +1,6 @@
+distlib==0.3.9
+platformdirs==4.3.7
+pycodestyle==2.13.0
+termcolor==3.0.1
+virtualenv==20.30.0
+wheel==0.45.1
