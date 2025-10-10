@@ -3,26 +3,26 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Transcribe App — Krok 1</title>
+  <title>Transcribe App — Krok 2</title>
   <link rel="stylesheet" href="/static/transcribe/app.css" />
 </head>
 <body>
   <main>
-    <h1>Transcribe App — Krok 1</h1>
-    <p>Zatím jen kostra UI. Tlačítka neprovádí žádnou akci.</p>
+    <h1>Transcribe App — Krok 2 (WebSocket echo)</h1>
+
     <div class="controls">
-      <button id="btnStart">Start</button>
-      <button id="btnStop" disabled>Konec záznamu</button>
+      <input id="msg" placeholder="napiš zprávu…" />
+      <button id="send">Odeslat</button>
+      <button id="connect">Připojit WS</button>
+      <button id="disconnect" disabled>Odpojit WS</button>
     </div>
+
     <section>
-      <h3>Živý náhled</h3>
-      <pre id="live"></pre>
+      <h3>Log</h3>
+      <pre id="log"></pre>
     </section>
-    <section>
-      <h3>Finální text</h3>
-      <pre id="final"></pre>
-    </section>
+
+    <script src="/static/transcribe/app.js"></script>
   </main>
-  <script src="/static/transcribe/app.js"></script>
 </body>
 </html>
