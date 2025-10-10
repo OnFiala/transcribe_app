@@ -1,28 +1,43 @@
+{% load static %}
 <!doctype html>
 <html lang="cs">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Transcribe App — Krok 2</title>
-  <link rel="stylesheet" href="/static/transcribe/app.css" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Transcribe App — Krok 3</title>
+    <link rel="stylesheet" href="{% static 'transcribe/app.css' %}" />
 </head>
 <body>
-  <main>
-    <h1>Transcribe App — Krok 2 (WebSocket echo)</h1>
-
-    <div class="controls">
-      <input id="msg" placeholder="napiš zprávu…" />
-      <button id="send">Odeslat</button>
-      <button id="connect">Připojit WS</button>
-      <button id="disconnect" disabled>Odpojit WS</button>
-    </div>
+    <main>
+        <h1>Transcribe App — Krok 3 (Audio → WS)</h1>
 
     <section>
-      <h3>Log</h3>
-      <pre id="log"></pre>
+        <h2>WebSocket echo (kontrola z Kroku 2)</h2>
+        <div class="controls">
+            <input id="msg" placeholder="napiš zprávu…" />
+            <button id="send">Odeslat</button>
+            <button id="connect">Připojit WS</button>
+            <button id="disconnect" disabled>Odpojit WS</button>
+        </div>
+        <h3>Log</h3>
+        <pre id="log"></pre>
     </section>
 
-    <script src="/static/transcribe/app.js"></script>
-  </main>
+    <hr />
+
+    <section>
+        <h2>Audio streaming</h2>
+        <div class="controls">
+            <button id="startAudio">Start záznamu</button>
+            <button id="stopAudio" disabled>Konec záznamu</button>
+        </div>
+        <p id="audioStatus">Nepřipojeno</p>
+        <p>Přijaté bajty: <span id="bytes">0</span></p>
+    </section>
+
+    <script src="{% static 'transcribe/app.js' %}"></script>
+    <script src="{% static 'transcribe/pcm-worklet.js' %}"></script>
+
+</main>
 </body>
 </html>
