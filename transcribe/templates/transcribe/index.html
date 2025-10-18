@@ -35,8 +35,23 @@
         <p>Přijaté bajty: <span id="bytes">0</span></p>
     </section>
 
+        <section>
+            <h2>STT přepis</h2>
+            <div class="controls">
+                <button id="startSTT">Start přepisu</button>
+                <button id="stopSTT" disabled>Konec záznamu</button>
+            </div>
+
+            <h3>Průběžný (partial)</h3>
+            <pre id="sttPartial"></pre>
+
+            <h3>Finální</h3>
+            <pre id="sttFinal"></pre>
+        </section>
+
+
     <script src="{% static 'transcribe/app.js' %}"></script>
-    <script src="{% static 'transcribe/pcm-worklet.js' %}"></script>
+
 
 </main>
 </body>
