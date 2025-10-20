@@ -1,25 +1,50 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+// eslint.config.mjs
+import js from "@eslint/js";
+import next from "eslint-config-next";
+import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
+import unusedImports from "eslint-plugin-unused-imports";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+/** @type {import('eslint').Linter.FlatConfig[]} */
+export default [
+  js.configs.recommended,
+  ...next(), // včetně core-web-vitals
 
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+  // TS pravidla (type-checked)
+  ...tseslint.configs.recommendedTypeChecked,
 
-const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  {
+    files: ["**/*.{ts,tsx}"],
+    languageOptions: {
+      parserOptions: {
+        project: ["./tsconfig.json"],
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    plugins: {
+      "react-hooks": reactHooks,
+      "unused-imports": unusedImports,
+    },
+    rules: {
+      // React Hooks
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+
+      // Čistota importů
+      "unused-imports/no-unused-imports": "error",
+      "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
+
+  // Ignory
   {
     ignores: [
-      "node_modules/**",
-      ".next/**",
-      "out/**",
-      "build/**",
-      "next-env.d.ts",
+      "node_modules/",
+      ".next/",
+      "out/",
+      "dist/",
+      "coverage/",
+      "**/*.d.ts",
     ],
   },
 ];
-
-export default eslintConfig;
