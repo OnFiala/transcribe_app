@@ -1,7 +1,7 @@
 "use client";
 
 import { useMicStream} from "@/hooks/useMicStream";
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -94,8 +94,18 @@ export default function TranscribeAppShell() {
         mic.start(); // 🔥 zapne mikrofon
       },
       onTranscript: (m) => {
-        console.log("partial:", m.text);
+        // očekáváme { type:"transcript", text:string, is_final?:boolean }
+        const text = (m?.text ?? "").trim();
+        if (!text) return;
+
+        if (m?.is_final) {
+          setSegments(prev => [...prev, text]);
+          setLiveText("");
+        } else {
+          setLiveText(text);
+        }
       },
+
       onClose: () => pushToast("WS odpojeno", "Mic"),
       onError: () => pushToast("WS chyba", "Mic"),
     });
@@ -199,6 +209,16 @@ function handleMicStop() {
   // UI stavy pro Translate/LLM
   const [targetLang, setTargetLang] = useState<string>("en");
   const [llmQuestion, setLlmQuestion] = useState<string>("");
+  // Live transcript state
+  const [liveText, setLiveText] = useState<string>("");
+  const [segments, setSegments] = useState<string[]>([]);
+
+  // autoscroll na konec při změně partialu/finalu
+  const liveEndRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    liveEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [liveText, segments]);
+
 
 
   // Drag & drop handlers
@@ -350,6 +370,45 @@ function handleMicStop() {
                         </Button>
                         )}
                       </div>
+                      <div className="mt-4">
+                        <div className="bg-white rounded-2xl p-4 border">
+                          {/* finální segmenty */}
+                          {segments.length > 0 && (
+                            <div className="space-y-2 mb-3">
+                              {segments.map((s, i) => (
+                                <p key={i} className="text-sm leading-relaxed">{s}</p>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* probíhající partial s “kurzorem” */}
+                          {liveText && (
+                            <p className="text-sm leading-relaxed">
+                              {liveText}
+                              <span className="ml-1 inline-block w-1 h-4 align-baseline bg-black animate-pulse" />
+                            </p>
+                          )}
+
+                          {/* empty state */}
+                          {!liveText && segments.length === 0 && (
+                            <p className="text-sm text-black/60">Zatím nic – po spuštění začni mluvit.</p>
+                          )}
+
+                          {/* anchor pro autoscroll */}
+                          <div ref={liveEndRef} />
+                        </div>
+
+                        <div className="mt-2 flex gap-2">
+                          <Button
+                            variant="secondary"
+                            className="rounded-xl"
+                            onClick={() => { setSegments([]); setLiveText(""); }}
+                          >
+                            Vymazat přepis
+                          </Button>
+                        </div>
+                      </div>
+
                     </div>
                   )}
 
