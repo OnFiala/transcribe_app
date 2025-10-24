@@ -1,5 +1,6 @@
 "use client";
 
+import { useMicStream} from "@/hooks/useMicStream";
 import React, { useMemo, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -85,33 +86,37 @@ export default function TranscribeAppShell() {
     // === Handlery pro napojení na backend ===
 
   async function handleMicStart() {
-    try {
-      const conn = connectTranscribeWS(WS_URL, {
-        onOpen: () => pushToast("WS připojeno", "Mic"),
-        onTranscript: (m) => {
-          // sem můžeš ukládat průběžný text / final transcript do stavu
-          console.log("partial/final:", m);
-        },
-        onClose: () => pushToast("WS odpojeno", "Mic"),
-        onError: () => pushToast("WS chyba", "Mic"),
-      });
-      setWsConn(conn);
-      conn.start(16000);
-      setMicOn(true);
-    } catch (e) {
-      pushToast(`Mic error: ${String(e)}`, "Mic");
-    }
+  try {
+    const conn = connectTranscribeWS(WS_URL, {
+      onOpen: () => {
+        pushToast("WS připojeno", "Mic");
+        conn.start(48000);
+        mic.start(); // 🔥 zapne mikrofon
+      },
+      onTranscript: (m) => {
+        console.log("partial:", m.text);
+      },
+      onClose: () => pushToast("WS odpojeno", "Mic"),
+      onError: () => pushToast("WS chyba", "Mic"),
+    });
+    setWsConn(conn);
+    setMicOn(true);
+  } catch (e) {
+    pushToast(`Mic error: ${String(e)}`, "Mic");
   }
+}
 
-  function handleMicStop() {
-    try {
-      wsConn?.stop();
-      wsConn?.close();
-    } finally {
-      setWsConn(null);
-      setMicOn(false);
-    }
+function handleMicStop() {
+  try {
+    mic.stop(); // 🔥 vypne mikrofon
+    wsConn?.stop();
+    wsConn?.close();
+  } finally {
+    setWsConn(null);
+    setMicOn(false);
   }
+}
+
 
   async function handleFileUpload() {
     if (!selectedFile) {
@@ -175,6 +180,14 @@ export default function TranscribeAppShell() {
 
   // State for mock actions
   const [micOn, setMicOn] = useState(false);
+  const mic = useMicStream({
+    onChunk: (b64) => wsConn?.sendAudioChunk(b64),
+    onError: (err) => pushToast(`Mic chyba: ${err.message}`, "Mic"),
+    sampleRate: 48000, // 🔥 sjednoceno se Speechmatics (SM_SR)
+    batchMS: 100,
+  });
+
+
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [generating, setGenerating] = useState(false);
