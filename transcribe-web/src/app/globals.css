@@ -1,5 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "tailwindcss";
+@theme {
+  --font-sans: var(--font-brand-sans), system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans";
+}
+html, body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+
 
 @custom-variant dark (&:is(.dark *));
 
