@@ -28,10 +28,17 @@ import {
   Loader2,
   Check,
 } from "lucide-react";
+import { uploadAudioFile, createSummary, translateText, askLLM } from "@/lib/api";
+import { connectTranscribeWS } from "@/lib/ws";
+
+
 
 // Color palette (kept as constants; base is enforced by design tokens in globals.css)
 const COLOR_MAIN_BG = "#52C6BD"; // main page background
 const COLOR_SIDEBAR_BG = "#391AA6"; // left sidebar background
+
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL!;
+
 
 // Feature model
 type FeatureKey =
@@ -75,11 +82,111 @@ export default function TranscribeAppShell() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
   }, []);
 
+    // === Handlery pro napojení na backend ===
+
+  async function handleMicStart() {
+    try {
+      const conn = connectTranscribeWS(WS_URL, {
+        onOpen: () => pushToast("WS připojeno", "Mic"),
+        onTranscript: (m) => {
+          // sem můžeš ukládat průběžný text / final transcript do stavu
+          console.log("partial/final:", m);
+        },
+        onClose: () => pushToast("WS odpojeno", "Mic"),
+        onError: () => pushToast("WS chyba", "Mic"),
+      });
+      setWsConn(conn);
+      conn.start(16000);
+      setMicOn(true);
+    } catch (e) {
+      pushToast(`Mic error: ${String(e)}`, "Mic");
+    }
+  }
+
+  function handleMicStop() {
+    try {
+      wsConn?.stop();
+      wsConn?.close();
+    } finally {
+      setWsConn(null);
+      setMicOn(false);
+    }
+  }
+
+  async function handleFileUpload() {
+    if (!selectedFile) {
+      pushToast("Nejprve vyber soubor.", "Upload");
+      return;
+    }
+    try {
+      setUploading(true);
+      const res = await uploadAudioFile(selectedFile, { language: "cs" });
+      setTranscriptId(res.transcript_id);
+      pushToast("Soubor nahrán – přepis běží.", "Upload");
+    } catch (e) {
+      pushToast(`Upload failed: ${String(e)}`, "Chyba");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleSummary() {
+    try {
+      setGenerating(true);
+      const res = await createSummary({ transcript_id: transcriptId });
+      pushToast(res.summary ?? "Shrnutí hotovo.", "Shrnutí");
+    } catch (e) {
+      pushToast(`Summary failed: ${String(e)}`, "Chyba");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleTranslate() {
+    try {
+      setGenerating(true);
+      const res = await translateText({ transcript_id: transcriptId, target_lang: targetLang });
+      pushToast(res.translated?.slice(0, 120) + "…", "Překlad");
+    } catch (e) {
+      pushToast(`Translate failed: ${String(e)}`, "Chyba");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleAskLLM() {
+    if (!llmQuestion.trim()) {
+      pushToast("Zadej otázku.", "LLM");
+      return;
+    }
+    try {
+      setGenerating(true);
+      const res = await askLLM({ transcript_id: transcriptId, question: llmQuestion.trim() });
+      pushToast(res.answer ?? "Odpověď připravena.", "LLM");
+    } catch (e) {
+      pushToast(`Q&A failed: ${String(e)}`, "Chyba");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+
+
+
   // State for mock actions
   const [micOn, setMicOn] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [generating, setGenerating] = useState(false);
+
+      // Backend napojení
+  const [wsConn, setWsConn] = useState<ReturnType<typeof connectTranscribeWS> | null>(null);
+  const [transcriptId, setTranscriptId] = useState<string | undefined>(undefined);
+
+  // UI stavy pro Translate/LLM
+  const [targetLang, setTargetLang] = useState<string>("en");
+  const [llmQuestion, setLlmQuestion] = useState<string>("");
+
 
   // Drag & drop handlers
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -218,20 +325,21 @@ export default function TranscribeAppShell() {
                 <CardContent className="text-sm leading-relaxed space-y-4" style={{ color: "#000" }}>
                   {active === "live-mic" && (
                     <div className="space-y-3">
-                      <p>Tady spustíš živý přepis z mikrofonu. (Mock – napojíme na WS „/ws/audio“.)</p>
+                      <p>Tady spustíš živý přepis z mikrofonu. (Napojeno na WS „/ws/audio“.)</p>
                       <div className="flex gap-2">
                         {!micOn ? (
-                          <Button onClick={() => { setMicOn(true); pushToast("Záznam spuštěn.", "Mic"); }} className="rounded-xl">
-                            <Play className="mr-2 size-4" /> Spustit záznam
-                          </Button>
-                        ) : (
-                          <Button onClick={() => { setMicOn(false); pushToast("Záznam ukončen.", "Mic"); }} className="rounded-xl" variant="secondary">
-                            <StopCircle className="mr-2 size-4" /> Zastavit
-                          </Button>
+                        <Button onClick={handleMicStart} className="rounded-xl">
+                          <Play className="mr-2 size-4" /> Spustit záznam
+                        </Button>
+                         ) : (
+                        <Button onClick={handleMicStop} className="rounded-xl" variant="secondary">
+                        <StopCircle className="mr-2 size-4" /> Zastavit
+                        </Button>
                         )}
                       </div>
                     </div>
                   )}
+
 
                   {active === "file-transcribe" && (
                     <div className="space-y-3">
@@ -258,12 +366,7 @@ export default function TranscribeAppShell() {
                           <Button
                             className="rounded-xl"
                             disabled={uploading}
-                            onClick={async () => {
-                              setUploading(true);
-                              await new Promise(r => setTimeout(r, 900));
-                              setUploading(false);
-                              pushToast("Soubor nahrán. Přepis zahájen.", "Upload");
-                            }}
+                              onClick={handleFileUpload}
                           >
                             {uploading ? (<><Loader2 className="mr-2 size-4 animate-spin" /> Nahrávám…</>) : (<><Upload className="mr-2 size-4" /> Odeslat</>)}
                           </Button>
@@ -278,12 +381,7 @@ export default function TranscribeAppShell() {
                       <Button
                         className="rounded-xl"
                         disabled={generating}
-                        onClick={async () => {
-                          setGenerating(true);
-                          await new Promise(r => setTimeout(r, 1200));
-                          setGenerating(false);
-                          pushToast("Shrnutí připraveno.", "AI");
-                        }}
+                        onClick={handleSummary}
                       >
                         {generating ? (<><Loader2 className="mr-2 size-4 animate-spin" /> Generuji…</>) : (<><Wand2 className="mr-2 size-4" /> Vygenerovat shrnutí</>)}
                       </Button>
@@ -294,24 +392,30 @@ export default function TranscribeAppShell() {
                     <div className="space-y-3">
                       <p>Přelož poslední přepis do vybraného jazyka. (Mock akce.)</p>
                       <div className="flex flex-wrap items-center gap-2">
-                        <select className="rounded-xl border px-3 py-2">
+                        <select
+                          className="rounded-xl border px-3 py-2"
+                          value={targetLang}
+                          onChange={(e) => setTargetLang(e.target.value)}
+                        >
                           <option value="en">English</option>
                           <option value="de">Deutsch</option>
                           <option value="es">Español</option>
                           <option value="pl">Polski</option>
                         </select>
-                        <Button className="rounded-xl" onClick={() => pushToast("Text přeložen.", "Překlad")}>Přeložit</Button>
+                        <Button className="rounded-xl" onClick={handleTranslate}>Přeložit</Button>
                       </div>
                     </div>
                   )}
 
                   {active === "llm" && (
-                    <div className="space-y-3">
-                      <p>Zeptej se na obsah přepisu. (Mock Q&A – napojíme na endpoint později.)</p>
-                      <div className="flex items-end gap-2">
-                        <Input placeholder="Např. ‚Co bylo hlavním tématem?‘" className="rounded-xl" />
-                        <Button className="rounded-xl" onClick={() => pushToast("Dotaz odeslán.", "LLM")}>Zeptat se</Button>
-                      </div>
+                    <div className="flex items-end gap-2">
+                      <Input
+                        placeholder="Např. ‚Co bylo hlavním tématem?‘"
+                        className="rounded-xl"
+                        value={llmQuestion}
+                        onChange={(e) => setLlmQuestion(e.target.value)}
+                    />
+                      <Button className="rounded-xl" onClick={handleAskLLM}>Zeptat se</Button>
                     </div>
                   )}
 
