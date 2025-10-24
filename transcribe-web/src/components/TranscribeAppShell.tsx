@@ -1,5 +1,6 @@
 "use client";
-import React, { useMemo, useState } from "react";
+
+import React, { useMemo, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,11 @@ import {
   Settings2,
   SquareFunction,
   Menu,
+  Upload,
+  Play,
+  StopCircle,
+  Loader2,
+  Check,
 } from "lucide-react";
 
 // Color palette (kept as constants; base is enforced by design tokens in globals.css)
@@ -31,11 +37,8 @@ const COLOR_SIDEBAR_BG = "#391AA6"; // left sidebar background
 type FeatureKey =
   | "live-mic"
   | "file-transcribe"
-  | "denoise"
   | "summary"
   | "translate"
-  | "autoclean"
-  | "diarization"
   | "llm"
   | "settings";
 
@@ -55,17 +58,43 @@ const FEATURES: Array<{
   { key: "settings", label: "Nastavení", icon: <Cog className="size-4" /> },
 ];
 
+// Simple toast system (no external deps)
+type Toast = { id: number; title?: string; message: string };
+
 export default function TranscribeAppShell() {
   const [active, setActive] = useState<FeatureKey>("live-mic");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarOpenMobile, setSidebarOpenMobile] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
   const activeLabel = useMemo(() => FEATURES.find(f => f.key === active)?.label ?? "", [active]);
+
+  const pushToast = useCallback((message: string, title?: string) => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, title, message }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3500);
+  }, []);
+
+  // State for mock actions
+  const [micOn, setMicOn] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [generating, setGenerating] = useState(false);
+
+  // Drag & drop handlers
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      pushToast(`Vybrán soubor: ${file.name}`, "Soubor přidán");
+    }
+  };
 
   return (
     <TooltipProvider>
       <div
-        className="min-h-screen w-full grid"
+        className="min-h-screen w-full grid transition-[grid-template-columns] duration-300"
         style={{
           gridTemplateColumns: sidebarCollapsed ? "80px 1fr" : "320px 1fr",
           backgroundColor: COLOR_MAIN_BG,
@@ -179,25 +208,120 @@ export default function TranscribeAppShell() {
           {/* Action/result stream */}
           <ScrollArea className="flex-1">
             <div className="mx-auto max-w-3xl w-full p-4 md:p-6 lg:p-8 space-y-6">
-              {/* Contextual empty state */}
-              <Card className="rounded-2xl shadow-lg border-0">
+              {/* Contextual panel by active feature */}
+              <Card className="rounded-2xl shadow-lg border-0 transition-all">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base md:text-lg" style={{ color: "#111" }}>
                     {activeLabel || "Vítej! Tohle je hlavní pracovní plocha."}
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm leading-relaxed" style={{ color: "#000" }}>
+                <CardContent className="text-sm leading-relaxed space-y-4" style={{ color: "#000" }}>
                   {active === "live-mic" && (
-                    <p className="mb-2">Připravíme přepis z mikrofonu v reálném čase. Klikni na <strong>Živý přepis (Mic)</strong> a spusť záznam.</p>
+                    <div className="space-y-3">
+                      <p>Tady spustíš živý přepis z mikrofonu. (Mock – napojíme na WS „/ws/audio“.)</p>
+                      <div className="flex gap-2">
+                        {!micOn ? (
+                          <Button onClick={() => { setMicOn(true); pushToast("Záznam spuštěn.", "Mic"); }} className="rounded-xl">
+                            <Play className="mr-2 size-4" /> Spustit záznam
+                          </Button>
+                        ) : (
+                          <Button onClick={() => { setMicOn(false); pushToast("Záznam ukončen.", "Mic"); }} className="rounded-xl" variant="secondary">
+                            <StopCircle className="mr-2 size-4" /> Zastavit
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   )}
+
                   {active === "file-transcribe" && (
-                    <p className="mb-2">Nahraj audio soubor a spusť asynchronní přepis. Výsledek se objeví v nové kartě s možností čištění a exportu.</p>
+                    <div className="space-y-3">
+                      <p>Nahraj audio soubor (mp3, wav, m4a…). Mock upload ukáže toast a náhled.</p>
+                      <div
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={onDrop}
+                        className="border-2 border-dashed rounded-2xl p-6 bg-white/60 hover:bg-white/80 transition-colors"
+                      >
+                        <div className="flex items-center justify-center gap-2 text-black/70">
+                          <Upload className="size-4" /> Přetáhni sem soubor nebo vyber ručně
+                        </div>
+                        <div className="mt-3">
+                          <Input type="file" accept="audio/*" onChange={(e) => {
+                            const f = e.target.files?.[0] ?? null;
+                            setSelectedFile(f);
+                            if (f) pushToast(`Vybrán soubor: ${f.name}`, "Soubor přidán");
+                          }} />
+                        </div>
+                      </div>
+                      {selectedFile && (
+                        <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3">
+                          <div className="text-sm"><strong>Soubor:</strong> {selectedFile.name}</div>
+                          <Button
+                            className="rounded-xl"
+                            disabled={uploading}
+                            onClick={async () => {
+                              setUploading(true);
+                              await new Promise(r => setTimeout(r, 900));
+                              setUploading(false);
+                              pushToast("Soubor nahrán. Přepis zahájen.", "Upload");
+                            }}
+                          >
+                            {uploading ? (<><Loader2 className="mr-2 size-4 animate-spin" /> Nahrávám…</>) : (<><Upload className="mr-2 size-4" /> Odeslat</>)}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   )}
-                  {active === "diarization" && (
-                    <p className="mb-2">Diarizace rozpozná jednotlivé mluvčí v nahrávce. Po dokončení zobrazíme časovou osu mluvčích.</p>
+
+                  {active === "summary" && (
+                    <div className="space-y-3">
+                      <p>Vytvoř shrnutí z posledního přepisu. (Mock – ukážeme toast po vygenerování.)</p>
+                      <Button
+                        className="rounded-xl"
+                        disabled={generating}
+                        onClick={async () => {
+                          setGenerating(true);
+                          await new Promise(r => setTimeout(r, 1200));
+                          setGenerating(false);
+                          pushToast("Shrnutí připraveno.", "AI");
+                        }}
+                      >
+                        {generating ? (<><Loader2 className="mr-2 size-4 animate-spin" /> Generuji…</>) : (<><Wand2 className="mr-2 size-4" /> Vygenerovat shrnutí</>)}
+                      </Button>
+                    </div>
                   )}
-                  {active !== "live-mic" && active !== "file-transcribe" && active !== "diarization" && (
-                    <p>Každý výstup je v samostatném bílém panelu se silným kontrastem pro perfektní čitelnost.</p>
+
+                  {active === "translate" && (
+                    <div className="space-y-3">
+                      <p>Přelož poslední přepis do vybraného jazyka. (Mock akce.)</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select className="rounded-xl border px-3 py-2">
+                          <option value="en">English</option>
+                          <option value="de">Deutsch</option>
+                          <option value="es">Español</option>
+                          <option value="pl">Polski</option>
+                        </select>
+                        <Button className="rounded-xl" onClick={() => pushToast("Text přeložen.", "Překlad")}>Přeložit</Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {active === "llm" && (
+                    <div className="space-y-3">
+                      <p>Zeptej se na obsah přepisu. (Mock Q&A – napojíme na endpoint později.)</p>
+                      <div className="flex items-end gap-2">
+                        <Input placeholder="Např. ‚Co bylo hlavním tématem?‘" className="rounded-xl" />
+                        <Button className="rounded-xl" onClick={() => pushToast("Dotaz odeslán.", "LLM")}>Zeptat se</Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {active === "settings" && (
+                    <div className="space-y-3">
+                      <p>Nastavení aplikace (motiv, jazyk UI, výstupní formáty…).</p>
+                      <Button variant="secondary" className="rounded-xl" onClick={() => pushToast("Nastavení uloženo.", "Settings")}>
+                        Uložit změny
+                      </Button>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -266,6 +390,19 @@ export default function TranscribeAppShell() {
             </div>
           </div>
         </main>
+
+        {/* Toasts */}
+        <div className="pointer-events-none fixed bottom-4 right-4 z-[100] space-y-2">
+          {toasts.map(t => (
+            <div key={t.id} className="pointer-events-auto bg-white text-black shadow-lg rounded-xl px-4 py-3 border flex items-start gap-3 min-w-[260px]">
+              <div className="mt-0.5"><Check className="size-4" /></div>
+              <div className="text-sm">
+                {t.title && <div className="font-semibold mb-0.5">{t.title}</div>}
+                <div>{t.message}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </TooltipProvider>
   );
