@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 
 export interface MicStreamOptions {
   onChunk: (base64Chunk: string) => void;
+
   onError?: (err: Error) => void;
   sampleRate?: number; // default 48000
   batchMs?: number;    // default 100

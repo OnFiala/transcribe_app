@@ -26,7 +26,6 @@ export function connectTranscribeWS(url: string, handlers: WSHandlers) {
 
   ws.onopen = () => {
     isOpen = true;
-    // flush queue
     while (queue.length) {
       const m = queue.shift()!;
       ws.send(JSON.stringify(m));
@@ -40,12 +39,13 @@ export function connectTranscribeWS(url: string, handlers: WSHandlers) {
     handlers.onClose?.();
   };
 
+  // 🔧 FIX: zavolej přímo onTranscript
   ws.onmessage = (ev) => {
-    try {
-      const msg = JSON.parse(ev.data as string);
-      if (msg.type === "transcript") handlers.onTranscript?.(msg);
-    } catch {
-      // ignore non-JSON
+    console.log("[WS msg]", ev.data);
+    let data: any;
+    try { data = JSON.parse(ev.data); } catch { return; }
+    if (data?.type === "transcript") {
+      handlers.onTranscript?.(data);   // <-- tohle chybělo
     }
   };
 
@@ -56,10 +56,11 @@ export function connectTranscribeWS(url: string, handlers: WSHandlers) {
     sendOrQueue({ type: "control", action: "stop" });
   }
   function sendAudioChunk(base64: string) {
-    sendOrQueue({ type: "audio", chunk: base64 });
+    // 🔧 sjednocený klíč 'data' (BE umí i 'chunk', ale tohle je čistší)
+    sendOrQueue({ type: "audio", data: base64 });
   }
   function close() {
-    try { ws.close(); } catch { /* noop */ }
+    try { ws.close(); } catch {}
   }
 
   return { start, stop, sendAudioChunk, close };
